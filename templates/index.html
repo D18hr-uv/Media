@@ -608,6 +608,12 @@
                                 <p class="video-stat-value" id="maxFakeProbability">0%</p>
                             </div>
                         </div>
+
+                        <!-- Quarter Analysis Section (added) -->
+                        <div class="result-item" style="margin-top: 2rem; grid-column: span 2;">
+                            <p class="result-item-label">Decision Insight</p>
+                            <p class="result-item-value" id="quarterAnalysis" style="font-size: 1.1rem; font-weight: 500;">Calculating...</p>
+                        </div>
                     </div>
 
                     <!-- Details Tab Content -->
@@ -686,6 +692,7 @@
         const resultSection = document.getElementById('result');
         const predictionEl = document.getElementById('prediction');
         const probabilityEl = document.getElementById('probability');
+        const quarterAnalysisEl = document.getElementById('quarterAnalysis');
         const limeImageEl = document.getElementById('limeImage');
         const shapImageEl = document.getElementById('shapImage');
         const uploadAnotherBtn = document.getElementById('upload-another');
@@ -861,6 +868,13 @@
                     
                     probabilityEl.textContent = (result.probability * 100).toFixed(1) + '%';
                     
+                    // Set quarter analysis text
+                    if (result.quarter_analysis) {
+                        quarterAnalysisEl.textContent = result.quarter_analysis;
+                    } else {
+                        quarterAnalysisEl.textContent = 'Analysis details unavailable.';
+                    }
+
                     // Set explanation images
                     const baseUrl = '/uploads/';
                     limeImageEl.src = baseUrl + result.lime_path;
@@ -956,6 +970,7 @@
             predictionEl.textContent = '';
             predictionEl.className = 'result-item-value';
             probabilityEl.textContent = '';
+            quarterAnalysisEl.textContent = 'Calculating...';
             limeImageEl.src = '';
             shapImageEl.src = '';
             
