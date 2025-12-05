@@ -618,6 +618,23 @@
 
                     <!-- Details Tab Content -->
                     <div class="tab-content" id="detailsContent">
+
+                        <!-- Image Analysis Details (Always visible when results are shown) -->
+                        <div id="imageDetailsSection" class="result-summary" style="margin-bottom: 2rem;">
+                            <div class="result-item">
+                                <p class="result-item-label">File Name</p>
+                                <p class="result-item-value" id="detailFileName" style="font-size: 1rem;">-</p>
+                            </div>
+                            <div class="result-item">
+                                <p class="result-item-label">File Size</p>
+                                <p class="result-item-value" id="detailFileSize" style="font-size: 1rem;">-</p>
+                            </div>
+                            <div class="result-item" style="grid-column: span 2;">
+                                <p class="result-item-label">Detailed Decision Insight</p>
+                                <p class="result-item-value" id="detailQuarterAnalysis" style="font-size: 1.1rem; font-weight: 500;">-</p>
+                            </div>
+                        </div>
+
                         <!-- Video frames section (hidden for images) -->
                         <div id="videoFramesSection" class="video-analysis" style="display: none;">
                             <h4 class="explanation-title">Video Frame Analysis</h4>
@@ -693,6 +710,9 @@
         const predictionEl = document.getElementById('prediction');
         const probabilityEl = document.getElementById('probability');
         const quarterAnalysisEl = document.getElementById('quarterAnalysis');
+        const detailQuarterAnalysisEl = document.getElementById('detailQuarterAnalysis');
+        const detailFileNameEl = document.getElementById('detailFileName');
+        const detailFileSizeEl = document.getElementById('detailFileSize');
         const limeImageEl = document.getElementById('limeImage');
         const shapImageEl = document.getElementById('shapImage');
         const uploadAnotherBtn = document.getElementById('upload-another');
@@ -868,11 +888,17 @@
                     
                     probabilityEl.textContent = (result.probability * 100).toFixed(1) + '%';
                     
+                    // Set details info
+                    detailFileNameEl.textContent = file.name;
+                    detailFileSizeEl.textContent = formatFileSize(file.size);
+
                     // Set quarter analysis text
                     if (result.quarter_analysis) {
                         quarterAnalysisEl.textContent = result.quarter_analysis;
+                        detailQuarterAnalysisEl.textContent = result.quarter_analysis;
                     } else {
                         quarterAnalysisEl.textContent = 'Analysis details unavailable.';
+                        detailQuarterAnalysisEl.textContent = 'Analysis details unavailable.';
                     }
 
                     // Set explanation images
@@ -971,6 +997,9 @@
             predictionEl.className = 'result-item-value';
             probabilityEl.textContent = '';
             quarterAnalysisEl.textContent = 'Calculating...';
+            detailQuarterAnalysisEl.textContent = '-';
+            detailFileNameEl.textContent = '-';
+            detailFileSizeEl.textContent = '-';
             limeImageEl.src = '';
             shapImageEl.src = '';
             
