@@ -8,6 +8,7 @@ import lime.lime_image
 import shap
 from skimage.segmentation import mark_boundaries
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 import video_processor
 import json
 import uuid
@@ -32,7 +33,11 @@ if not os.path.exists(VIDEO_FRAMES_FOLDER):
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'mp4', 'avi', 'mov', 'mkv', 'webm'}
 
 # Load the trained model
-model = tf.keras.models.load_model('fake_face_detection_model.h5')
+try:
+    model = tf.keras.models.load_model('fake_face_detection_model.h5')
+except:
+    print("Could not load model. Please ensure 'fake_face_detection_model.h5' exists.")
+    model = None
 
 # Function to check allowed file types
 def allowed_file(filename):
@@ -49,7 +54,8 @@ def preprocess_image(file_path, target_size=(128, 128)):
         img = tf.keras.preprocessing.image.load_img(file_path, target_size=target_size)
         img_array = tf.keras.preprocessing.image.img_to_array(img)
         img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-        img_array /= 255.0  # Normalize
+        # Use MobileNetV2 preprocessing
+        img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
         return img_array
     except Exception as e:
         print(f"Error in image preprocessing: {e}")
@@ -64,8 +70,14 @@ def index():
 def generate_lime_explanation(image, model, save_path):
     explainer = lime.lime_image.LimeImageExplainer()
     explanation = explainer.explain_instance(image[0].astype('double'), model.predict, top_labels=1, hide_color=0, num_samples=1000)
+
+    # temp is in range [-1, 1] due to MobileNetV2 preprocessing
     temp, mask = explanation.get_image_and_mask(explanation.top_labels[0], positive_only=False, num_features=5, hide_rest=False)
-    img_boundry = mark_boundaries(temp, mask)
+
+    # Convert temp back to [0, 1] for display
+    temp_display = (temp + 1) / 2.0
+
+    img_boundry = mark_boundaries(temp_display, mask)
 
     plt.figure(figsize=(10, 10))
     plt.imshow(img_boundry)
@@ -73,7 +85,28 @@ def generate_lime_explanation(image, model, save_path):
     plt.savefig(save_path)
     plt.close()
 
-# Advanced SHAP explanation function using DeepExplainer with proper scaling
+def analyze_quarters(shap_values_rescaled):
+    """
+    Analyzes which quarter of the image contributes most to the decision.
+    shap_values_rescaled: 2D array of SHAP values (height, width)
+    """
+    h, w = shap_values_rescaled.shape
+    mid_h, mid_w = h // 2, w // 2
+
+    quarters = {
+        "Top-Left": shap_values_rescaled[0:mid_h, 0:mid_w],
+        "Top-Right": shap_values_rescaled[0:mid_h, mid_w:w],
+        "Bottom-Left": shap_values_rescaled[mid_h:h, 0:mid_w],
+        "Bottom-Right": shap_values_rescaled[mid_h:h, mid_w:w]
+    }
+
+    # Calculate sum of absolute contributions
+    contributions = {k: np.sum(np.abs(v)) for k, v in quarters.items()}
+    max_quarter = max(contributions, key=contributions.get)
+
+    return max_quarter, contributions
+
+# Advanced SHAP explanation function using DeepExplainer with proper scaling and legend
 def generate_shap_explanation(image, model, save_path):
     # Using SHAP's DeepExplainer for deep learning models
     explainer = shap.DeepExplainer(model, image)
@@ -82,28 +115,51 @@ def generate_shap_explanation(image, model, save_path):
     shap_values = explainer.shap_values(image)
 
     # Rescale SHAP values to fit within the range [-1, 1]
-    shap_values_rescaled = np.sum(shap_values[0], axis=-1)
-    shap_values_rescaled = shap_values_rescaled / np.max(np.abs(shap_values_rescaled))  # Normalize between -1 and 1
+    # shap_values[0] shape is (1, 128, 128, 3)
+    shap_values_rescaled = np.sum(shap_values[0], axis=-1) # shape (1, 128, 128)
+    shap_values_rescaled = shap_values_rescaled[0] # shape (128, 128)
+
+    max_val = np.max(np.abs(shap_values_rescaled))
+    if max_val > 0:
+        shap_values_rescaled = shap_values_rescaled / max_val  # Normalize between -1 and 1
+
+    # Analyze quarters
+    max_quarter, contributions = analyze_quarters(shap_values_rescaled)
 
     # Plot the original image with SHAP values as an overlay (heatmap)
-    plt.figure(figsize=(10, 10))
+    plt.figure(figsize=(12, 6))
 
     # Display original image
     plt.subplot(1, 2, 1)
-    plt.imshow(image[0])
+    # MobileNetV2 preprocessing puts values in [-1, 1]. To display, shift to [0, 1]
+    display_img = (image[0] + 1) / 2.0
+    plt.imshow(display_img)
     plt.title("Original Image")
     plt.axis('off')
 
     # Overlay SHAP values
     plt.subplot(1, 2, 2)
-    plt.imshow(image[0])
-    plt.imshow(shap_values_rescaled, cmap='coolwarm', alpha=0.6)  # Set alpha for transparency
-    plt.colorbar(label='SHAP Value')  # Add colorbar to represent SHAP value scale
+    plt.imshow(display_img)
+    # Use coolwarm: Blue=Negative (Real), Red=Positive (Fake) usually for sigmoid output 0-1
+    # But check model output interpretation.
+    im = plt.imshow(shap_values_rescaled, cmap='coolwarm', alpha=0.6, vmin=-1, vmax=1)
+
+    # Custom Legend
+    # Create patches for legend
+    red_patch = mpatches.Patch(color='red', label='Contributions to Fake')
+    blue_patch = mpatches.Patch(color='blue', label='Contributions to Real')
+    plt.legend(handles=[red_patch, blue_patch], loc='lower right')
+
+    cbar = plt.colorbar(im, label='SHAP Value')
+    cbar.set_label('Feature Contribution (Blue=Real, Red=Fake)', rotation=270, labelpad=15)
+
     plt.title("SHAP Explanation")
     plt.axis('off')
 
-    plt.savefig(save_path, bbox_inches='tight', pad_inches=0)  # Save the SHAP explanation image
+    plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close()
+
+    return max_quarter
 
 # Serve uploaded files
 @app.route('/uploads/<path:filename>')
@@ -126,6 +182,9 @@ def predict():
             filename = secure_filename(file.filename)
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             file.save(file_path)
+
+            if not model:
+                 return jsonify({'error': 'Model not loaded'}), 500
 
             # Check if the file is a video
             if is_video(filename):
@@ -155,7 +214,7 @@ def predict():
                 shap_path = os.path.join(output_dir, 'shap_explanation.png')
                 
                 generate_lime_explanation(img_array, model, lime_path)
-                generate_shap_explanation(img_array, model, shap_path)
+                max_quarter = generate_shap_explanation(img_array, model, shap_path)
                 
                 # Save detailed results to a JSON file
                 results_path = os.path.join(output_dir, 'results.json')
@@ -183,7 +242,8 @@ def predict():
                     'representative_frame': os.path.relpath(max_prob_frame, app.config['UPLOAD_FOLDER']),
                     'lime_path': os.path.relpath(lime_path, app.config['UPLOAD_FOLDER']),
                     'shap_path': os.path.relpath(shap_path, app.config['UPLOAD_FOLDER']),
-                    'session_id': session_id
+                    'session_id': session_id,
+                    'quarter_analysis': f"The {max_quarter} of the frame shows the strongest features influencing the decision."
                 })
             else:
                 # Process image (existing code)
@@ -202,7 +262,7 @@ def predict():
                 shap_path = os.path.join(app.config['UPLOAD_FOLDER'], 'shap_explanation.png')
 
                 generate_lime_explanation(img_array, model, lime_path)
-                generate_shap_explanation(img_array, model, shap_path)
+                max_quarter = generate_shap_explanation(img_array, model, shap_path)
 
                 # Return result
                 return jsonify({
@@ -210,11 +270,14 @@ def predict():
                     'prediction': pred_class,
                     'probability': prob,
                     'lime_path': 'lime_explanation.png',
-                    'shap_path': 'shap_explanation.png'
+                    'shap_path': 'shap_explanation.png',
+                    'quarter_analysis': f"The {max_quarter} of the image shows the strongest features influencing the decision."
                 })
 
         except Exception as e:
             print(f"Error during prediction: {e}")
+            import traceback
+            traceback.print_exc()
             return jsonify({'error': f'Prediction failed: {str(e)}'}), 500
     else:
         return jsonify({'error': 'Invalid file type. Supported formats: ' + ', '.join(ALLOWED_EXTENSIONS)}), 400
