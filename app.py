@@ -102,14 +102,23 @@ def analyze_quarters(shap_values_rescaled):
 
     # Calculate sum of absolute contributions
     contributions = {k: np.sum(np.abs(v)) for k, v in quarters.items()}
-    max_quarter = max(contributions, key=contributions.get)
+    total_contribution = sum(contributions.values())
 
-    return max_quarter, contributions
+    max_quarter = max(contributions, key=contributions.get)
+    max_val = contributions[max_quarter]
+
+    if total_contribution > 0:
+        percentage = (max_val / total_contribution) * 100
+        return f"The {max_quarter} area contributed {percentage:.1f}% to the decision.", contributions
+
+    return f"The {max_quarter} area shows the strongest features influencing the decision.", contributions
 
 # Advanced SHAP explanation function using DeepExplainer with proper scaling and legend
 def generate_shap_explanation(image, model, save_path):
     # Using SHAP's DeepExplainer for deep learning models
-    explainer = shap.DeepExplainer(model, image)
+    # We use a zero background (grey in [-1, 1] space) as baseline
+    background = np.zeros((1, 128, 128, 3))
+    explainer = shap.DeepExplainer(model, background)
 
     # Compute SHAP values
     shap_values = explainer.shap_values(image)
@@ -243,7 +252,7 @@ def predict():
                     'lime_path': os.path.relpath(lime_path, app.config['UPLOAD_FOLDER']),
                     'shap_path': os.path.relpath(shap_path, app.config['UPLOAD_FOLDER']),
                     'session_id': session_id,
-                    'quarter_analysis': f"The {max_quarter} of the frame shows the strongest features influencing the decision."
+                    'quarter_analysis': max_quarter # It's now a full sentence
                 })
             else:
                 # Process image (existing code)
@@ -271,7 +280,7 @@ def predict():
                     'probability': prob,
                     'lime_path': 'lime_explanation.png',
                     'shap_path': 'shap_explanation.png',
-                    'quarter_analysis': f"The {max_quarter} of the image shows the strongest features influencing the decision."
+                    'quarter_analysis': max_quarter # It's now a full sentence
                 })
 
         except Exception as e:
