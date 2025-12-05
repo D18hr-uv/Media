@@ -49,13 +49,14 @@ def is_video(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in video_extensions
 
 # Preprocess image for model input
-def preprocess_image(file_path, target_size=(128, 128)):
+def preprocess_image(file_path, target_size=(224, 224)): # EfficientNetB0 standard
     try:
         img = tf.keras.preprocessing.image.load_img(file_path, target_size=target_size)
         img_array = tf.keras.preprocessing.image.img_to_array(img)
         img_array = np.expand_dims(img_array, axis=0)  # Add batch dimension
-        # Use MobileNetV2 preprocessing
-        img_array = tf.keras.applications.mobilenet_v2.preprocess_input(img_array)
+        # EfficientNetB0 expects 0-255 inputs. No scaling needed for B0-B7 if weights included
+        # But let's verify if explicit call does anything.
+        # tf.keras.applications.efficientnet.preprocess_input is essentially a pass-through for B0-B7
         return img_array
     except Exception as e:
         print(f"Error in image preprocessing: {e}")
@@ -69,13 +70,14 @@ def index():
 # LIME explanation function
 def generate_lime_explanation(image, model, save_path):
     explainer = lime.lime_image.LimeImageExplainer()
+    # Image is [0, 255], LIME expects double/float.
     explanation = explainer.explain_instance(image[0].astype('double'), model.predict, top_labels=1, hide_color=0, num_samples=1000)
 
-    # temp is in range [-1, 1] due to MobileNetV2 preprocessing
+    # temp is in range [0, 255]
     temp, mask = explanation.get_image_and_mask(explanation.top_labels[0], positive_only=False, num_features=5, hide_rest=False)
 
-    # Convert temp back to [0, 1] for display
-    temp_display = (temp + 1) / 2.0
+    # Convert temp to [0, 1] for display (mark_boundaries expects float images in [0, 1] or uint8)
+    temp_display = temp.astype(np.uint8)
 
     img_boundry = mark_boundaries(temp_display, mask)
 
@@ -116,17 +118,17 @@ def analyze_quarters(shap_values_rescaled):
 # Advanced SHAP explanation function using DeepExplainer with proper scaling and legend
 def generate_shap_explanation(image, model, save_path):
     # Using SHAP's DeepExplainer for deep learning models
-    # We use a zero background (grey in [-1, 1] space) as baseline
-    background = np.zeros((1, 128, 128, 3))
+    # EfficientNet inputs are [0, 255]. Use black background (0)
+    background = np.zeros((1, 224, 224, 3))
     explainer = shap.DeepExplainer(model, background)
 
     # Compute SHAP values
     shap_values = explainer.shap_values(image)
 
     # Rescale SHAP values to fit within the range [-1, 1]
-    # shap_values[0] shape is (1, 128, 128, 3)
-    shap_values_rescaled = np.sum(shap_values[0], axis=-1) # shape (1, 128, 128)
-    shap_values_rescaled = shap_values_rescaled[0] # shape (128, 128)
+    # shap_values[0] shape is (1, 224, 224, 3)
+    shap_values_rescaled = np.sum(shap_values[0], axis=-1) # shape (1, 224, 224)
+    shap_values_rescaled = shap_values_rescaled[0] # shape (224, 224)
 
     max_val = np.max(np.abs(shap_values_rescaled))
     if max_val > 0:
@@ -140,8 +142,8 @@ def generate_shap_explanation(image, model, save_path):
 
     # Display original image
     plt.subplot(1, 2, 1)
-    # MobileNetV2 preprocessing puts values in [-1, 1]. To display, shift to [0, 1]
-    display_img = (image[0] + 1) / 2.0
+    # EfficientNet inputs are [0, 255]. To display, normalize to [0, 1]
+    display_img = image[0] / 255.0
     plt.imshow(display_img)
     plt.title("Original Image")
     plt.axis('off')

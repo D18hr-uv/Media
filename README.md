@@ -36,7 +36,7 @@ The system is available as a web application with a user-friendly interface that
 
 ## <a name="features">🔋 Features</a>
 
-👉 **Deep Learning Detection**: Leverages **MobileNetV2** (Transfer Learning) for accurate identification of fake images
+👉 **Deep Learning Detection**: Leverages **EfficientNetB0** (Transfer Learning) for accurate identification of fake images
 
 👉 **Quarter Analysis**: Automatically identifies which quadrant of the image contributed most to the decision, providing immediate textual insights.
 
@@ -79,7 +79,7 @@ pip install -r requirements.txt
 
 **Training the Model**
 
-Before running the application, you must train the model (or generate the initial weights) using your dataset. The system uses MobileNetV2 for transfer learning.
+Before running the application, you must train the model (or generate the initial weights) using your dataset. The system uses EfficientNetB0 for transfer learning.
 
 ```bash
 python model.py
@@ -98,10 +98,10 @@ The web application will be available at [http://localhost:5000](http://localhos
 
 ## <a name="model-architecture">🧠 Model Architecture</a>
 
-MediaSentinel uses **MobileNetV2** as a feature extractor, employing transfer learning to achieve high accuracy with efficient performance:
+MediaSentinel uses **EfficientNetB0** as a feature extractor, employing transfer learning to achieve high accuracy with efficient performance:
 
-- **Base Model**: MobileNetV2 (pretrained on ImageNet)
-- **Input**: 128x128 RGB images (preprocessed to [-1, 1] range)
+- **Base Model**: EfficientNetB0 (pretrained on ImageNet)
+- **Input**: 224x224 RGB images (preprocessed to [0, 255] range)
 - **Global Average Pooling**: Reduces spatial dimensions
 - **Dense Layers**: Custom top layers for binary classification (Real vs Fake)
 - **Output Layer**: Sigmoid activation
