@@ -117,17 +117,30 @@ def analyze_quarters(shap_values_rescaled):
 
 # Advanced SHAP explanation function using DeepExplainer with proper scaling and legend
 def generate_shap_explanation(image, model, save_path):
-    # Using SHAP's DeepExplainer for deep learning models
-    # EfficientNet inputs are [0, 255]. Use black background (0)
-    background = np.zeros((1, 224, 224, 3))
-    explainer = shap.DeepExplainer(model, background)
+    # Using SHAP's generic Explainer (PartitionExplainer for images) which is more robust
+    # than DeepExplainer/GradientExplainer for TF 2.x + EfficientNet
+
+    # Define a prediction function that wraps the model
+    def f(X):
+        return model.predict(X)
+
+    # Use an Image masker
+    # "inpaint_telea" fills masked regions by inpainting.
+    # image[0].shape is (224, 224, 3)
+    masker = shap.maskers.Image("inpaint_telea", image[0].shape)
+
+    explainer = shap.Explainer(f, masker)
 
     # Compute SHAP values
-    shap_values = explainer.shap_values(image)
+    # max_evals controls the tradeoff between speed and accuracy
+    shap_values_obj = explainer(image, max_evals=300, batch_size=50)
+
+    # Extract values from the Explanation object
+    # shap_values_obj.values shape is (1, 224, 224, 3, 1) for single output
+    values = shap_values_obj.values[..., 0] # Now (1, 224, 224, 3)
 
     # Rescale SHAP values to fit within the range [-1, 1]
-    # shap_values[0] shape is (1, 224, 224, 3)
-    shap_values_rescaled = np.sum(shap_values[0], axis=-1) # shape (1, 224, 224)
+    shap_values_rescaled = np.sum(values, axis=-1) # shape (1, 224, 224)
     shap_values_rescaled = shap_values_rescaled[0] # shape (224, 224)
 
     max_val = np.max(np.abs(shap_values_rescaled))
