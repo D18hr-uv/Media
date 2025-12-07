@@ -81,10 +81,27 @@ def generate_lime_explanation(image, model, save_path):
 
     img_boundry = mark_boundaries(temp_display, mask)
 
-    plt.figure(figsize=(10, 10))
-    plt.imshow(img_boundry)
+    plt.figure(figsize=(12, 6))
+
+    # Display original image
+    plt.subplot(1, 2, 1)
+    # EfficientNet inputs are [0, 255]. To display, normalize to [0, 1]
+    plt.imshow(image[0] / 255.0)
+    plt.title("Original Image")
     plt.axis('off')
-    plt.savefig(save_path)
+
+    # Display LIME explanation
+    plt.subplot(1, 2, 2)
+    plt.imshow(img_boundry)
+    plt.title("LIME Explanation")
+    plt.axis('off')
+
+    # Custom Legend
+    green_patch = mpatches.Patch(color='green', label='Supports Prediction')
+    red_patch = mpatches.Patch(color='red', label='Opposes Prediction')
+    plt.legend(handles=[green_patch, red_patch], loc='lower right')
+
+    plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close()
 
 def analyze_quarters(shap_values_rescaled):
