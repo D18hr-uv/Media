@@ -68,7 +68,7 @@ def index():
     return render_template('index.html')
 
 # LIME explanation function
-def generate_lime_explanation(image, model, save_path):
+def generate_lime_explanation(image, model, save_path, pred_class):
     explainer = lime.lime_image.LimeImageExplainer()
     # Image is [0, 255], LIME expects double/float.
     explanation = explainer.explain_instance(image[0].astype('double'), model.predict, top_labels=1, hide_color=0, num_samples=1000)
@@ -81,24 +81,40 @@ def generate_lime_explanation(image, model, save_path):
 
     img_boundry = mark_boundaries(temp_display, mask)
 
-    plt.figure(figsize=(12, 6))
+    # Vertical Layout: figsize (width, height) increased height to accommodate vertical stacking
+    plt.figure(figsize=(8, 12))
 
     # Display original image
-    plt.subplot(1, 2, 1)
+    plt.subplot(2, 1, 1)
     # EfficientNet inputs are [0, 255]. To display, normalize to [0, 1]
     plt.imshow(image[0] / 255.0)
     plt.title("Original Image")
     plt.axis('off')
 
     # Display LIME explanation
-    plt.subplot(1, 2, 2)
+    plt.subplot(2, 1, 2)
     plt.imshow(img_boundry)
     plt.title("LIME Explanation")
     plt.axis('off')
 
     # Custom Legend
-    green_patch = mpatches.Patch(color='green', label='Supports Prediction')
-    red_patch = mpatches.Patch(color='red', label='Opposes Prediction')
+    # Adjust semantics based on prediction class
+    # LIME green = supports top prediction.
+    # If prediction is FAKE, Green = Supports Fake, Red = Supports Real
+    # If prediction is REAL, Green = Supports Real, Red = Supports Fake
+    if pred_class.lower() == 'fake':
+        green_label = 'Contributes to Fake'
+        red_label = 'Contributes to Real'
+    else:
+        green_label = 'Contributes to Real'
+        red_label = 'Contributes to Fake'
+
+    green_patch = mpatches.Patch(color='green', label=green_label)
+    # LIME mask uses just one color for 'positive_only=False' but mark_boundaries usually outlines.
+    # Standard LIME plot: Green is Pros, Red is Cons for the Top Class.
+    # If Top Class is Fake: Green->Fake, Red->Real
+
+    red_patch = mpatches.Patch(color='red', label=red_label)
     plt.legend(handles=[green_patch, red_patch], loc='lower right')
 
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
@@ -168,34 +184,39 @@ def generate_shap_explanation(image, model, save_path):
     max_quarter, contributions = analyze_quarters(shap_values_rescaled)
 
     # Plot the original image with SHAP values as an overlay (heatmap)
-    plt.figure(figsize=(12, 6))
+    # Vertical layout, larger explanation
+    fig = plt.figure(figsize=(8, 14))
 
-    # Display original image
-    plt.subplot(1, 2, 1)
+    # GridSpec to control subplot sizes (Original Image vs SHAP Explanation)
+    # Making SHAP larger (ratio 1:2)
+    gs = fig.add_gridspec(2, 1, height_ratios=[1, 2])
+
+    # Display original image (Top)
+    ax1 = fig.add_subplot(gs[0, 0])
     # EfficientNet inputs are [0, 255]. To display, normalize to [0, 1]
     display_img = image[0] / 255.0
-    plt.imshow(display_img)
-    plt.title("Original Image")
-    plt.axis('off')
+    ax1.imshow(display_img)
+    ax1.set_title("Original Image")
+    ax1.axis('off')
 
-    # Overlay SHAP values
-    plt.subplot(1, 2, 2)
-    plt.imshow(display_img)
+    # Overlay SHAP values (Bottom, Larger)
+    ax2 = fig.add_subplot(gs[1, 0])
+    ax2.imshow(display_img)
     # Use coolwarm: Blue=Negative (Real), Red=Positive (Fake) usually for sigmoid output 0-1
     # But check model output interpretation.
-    im = plt.imshow(shap_values_rescaled, cmap='coolwarm', alpha=0.6, vmin=-1, vmax=1)
+    im = ax2.imshow(shap_values_rescaled, cmap='coolwarm', alpha=0.6, vmin=-1, vmax=1)
 
     # Custom Legend
     # Create patches for legend
     red_patch = mpatches.Patch(color='red', label='Contributions to Fake')
     blue_patch = mpatches.Patch(color='blue', label='Contributions to Real')
-    plt.legend(handles=[red_patch, blue_patch], loc='lower right')
+    ax2.legend(handles=[red_patch, blue_patch], loc='lower right')
 
-    cbar = plt.colorbar(im, label='SHAP Value')
+    cbar = plt.colorbar(im, ax=ax2, label='SHAP Value')
     cbar.set_label('Feature Contribution (Blue=Real, Red=Fake)', rotation=270, labelpad=15)
 
-    plt.title("SHAP Explanation")
-    plt.axis('off')
+    ax2.set_title("SHAP Explanation")
+    ax2.axis('off')
 
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close()
@@ -254,7 +275,12 @@ def predict():
                 lime_path = os.path.join(output_dir, 'lime_explanation.png')
                 shap_path = os.path.join(output_dir, 'shap_explanation.png')
                 
-                generate_lime_explanation(img_array, model, lime_path)
+                # Determine predicted class for legend (use overall prediction or frame prediction)
+                # Using overall video prediction for context, or "Fake" if high prob.
+                # Here we use the generic class label "Fake" or "Real" based on the frame probability.
+                frame_pred_class = "fake" if results['max_fake_probability'] > 0.4 else "real"
+
+                generate_lime_explanation(img_array, model, lime_path, frame_pred_class)
                 max_quarter = generate_shap_explanation(img_array, model, shap_path)
                 
                 # Save detailed results to a JSON file
@@ -302,7 +328,7 @@ def predict():
                 lime_path = os.path.join(app.config['UPLOAD_FOLDER'], 'lime_explanation.png')
                 shap_path = os.path.join(app.config['UPLOAD_FOLDER'], 'shap_explanation.png')
 
-                generate_lime_explanation(img_array, model, lime_path)
+                generate_lime_explanation(img_array, model, lime_path, pred_class)
                 max_quarter = generate_shap_explanation(img_array, model, shap_path)
 
                 # Return result
