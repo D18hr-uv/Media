@@ -81,20 +81,20 @@ def generate_lime_explanation(image, model, save_path, pred_class):
 
     img_boundry = mark_boundaries(temp_display, mask)
 
-    # Vertical Layout: figsize (width, height) increased height to accommodate vertical stacking
-    plt.figure(figsize=(8, 12))
+    # Horizontal Layout: Side-by-side
+    plt.figure(figsize=(12, 6))
 
     # Display original image
-    plt.subplot(2, 1, 1)
+    plt.subplot(1, 2, 1)
     # EfficientNet inputs are [0, 255]. To display, normalize to [0, 1]
     plt.imshow(image[0] / 255.0)
     plt.title("Original Image")
     plt.axis('off')
 
     # Display LIME explanation
-    plt.subplot(2, 1, 2)
+    plt.subplot(1, 2, 2)
     plt.imshow(img_boundry)
-    plt.title("LIME Explanation")
+    plt.title("Explanation")
     plt.axis('off')
 
     # Custom Legend
@@ -184,14 +184,13 @@ def generate_shap_explanation(image, model, save_path):
     max_quarter, contributions = analyze_quarters(shap_values_rescaled)
 
     # Plot the original image with SHAP values as an overlay (heatmap)
-    # Vertical layout, larger explanation
-    fig = plt.figure(figsize=(8, 14))
+    # Horizontal layout, side-by-side
+    fig = plt.figure(figsize=(12, 6))
 
     # GridSpec to control subplot sizes (Original Image vs SHAP Explanation)
-    # Making SHAP larger (ratio 1:2)
-    gs = fig.add_gridspec(2, 1, height_ratios=[1, 2])
+    gs = fig.add_gridspec(1, 2, width_ratios=[1, 1])
 
-    # Display original image (Top)
+    # Display original image (Left)
     ax1 = fig.add_subplot(gs[0, 0])
     # EfficientNet inputs are [0, 255]. To display, normalize to [0, 1]
     display_img = image[0] / 255.0
@@ -199,8 +198,8 @@ def generate_shap_explanation(image, model, save_path):
     ax1.set_title("Original Image")
     ax1.axis('off')
 
-    # Overlay SHAP values (Bottom, Larger)
-    ax2 = fig.add_subplot(gs[1, 0])
+    # Overlay SHAP values (Right)
+    ax2 = fig.add_subplot(gs[0, 1])
     ax2.imshow(display_img)
     # Use coolwarm: Blue=Negative (Real), Red=Positive (Fake) usually for sigmoid output 0-1
     # But check model output interpretation.
@@ -215,7 +214,7 @@ def generate_shap_explanation(image, model, save_path):
     cbar = plt.colorbar(im, ax=ax2, label='SHAP Value')
     cbar.set_label('Feature Contribution (Blue=Real, Red=Fake)', rotation=270, labelpad=15)
 
-    ax2.set_title("SHAP Explanation")
+    ax2.set_title("Explanation")
     ax2.axis('off')
 
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
